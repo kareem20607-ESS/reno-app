@@ -42,6 +42,9 @@
     var day = d.toDateString() === n.toDateString() ? 'النهارده' : d.toDateString() === y.toDateString() ? 'إمبارح' : ar(d.getDate() + '/' + (d.getMonth() + 1));
     return day + ' ' + timeAr(d);
   }
+  /* نقطة ربط لملفات الصفحات التانية (js/sale.js …): بتسجّل شاشاتها وأفعالها هنا. */
+  var R = window.RENO = { S: S, CFG: CFG, LIVE: LIVE, views: {}, acts: {}, inputs: [], on: {}, hold: null };
+  function emit(name, arg) { (R.on[name] || []).forEach(function (f) { try { f(arg); } catch (e) { } }); }
   var toastT;
   function toast(msg) { var t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(function () { t.hidden = true; }, 3200); }
   function store(k, v) { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } }
@@ -51,9 +54,10 @@
   function setData(d) {
     S.data = d;
     var limit = Number(d.lowLimit) || 2, groups = {}, order = [];
+    var hold = R.hold ? R.hold() : {};           /* قطع اتباعت من الجهاز ده ولسه ما ظهرتش في رصيد الشيت */
     S.byBarcode = {};
     (d.items || []).forEach(function (r) {
-      var it = { b: String(r[0]), n: String(r[1] || ''), m: String(r[2] || ''), s: sizeLabel(r[3]), p: Number(r[4]) || 0, q: Number(r[5]) || 0, src: String(r[6] || '') };
+      var it = { b: String(r[0]), n: String(r[1] || ''), m: String(r[2] || ''), s: sizeLabel(r[3]), p: Number(r[4]) || 0, q: (Number(r[5]) || 0) - (hold[String(r[0]).toUpperCase()] || 0), src: String(r[6] || '') };
       S.byBarcode[it.b.toUpperCase()] = it;
       var key = it.m || it.b;
       if (!groups[key]) { groups[key] = { code: key, name: it.n, items: [], total: 0, price: it.p, src: it.src }; order.push(key); }
@@ -102,7 +106,7 @@
     if (!/(^|&)(id_token|error)=/.test(h)) return false;
     var q = {}; h.split('&').forEach(function (kv) { var i = kv.indexOf('='); if (i > 0) q[kv.slice(0, i)] = decodeURIComponent(kv.slice(i + 1).replace(/\+/g, ' ')); });
     var st = load('reno_nonce') || {}; store('reno_nonce', null);
-    history.replaceState(null, '', location.pathname + location.search + (/^#(home|catalog|scan|p\/)/.test(st.back || '') ? st.back : '#home'));
+    history.replaceState(null, '', location.pathname + location.search + (/^#(home|catalog|scan|all|sale|s\/|p\/)/.test(st.back || '') ? st.back : '#home'));
     if (q.error) {
       if (!st.silent) S.loginErr = q.error === 'access_denied' ? 'الدخول اتلغى، أو الحساب ده مش مضاف في وضع التجربة عند جوجل.' : 'جوجل رفضت طلب الدخول (' + q.error + '). جرّبي تاني.';
       return true;
@@ -197,6 +201,7 @@
         if (d.user && d.user.name && S.user) S.user.name = d.user.name;
         setData(d); store('reno_cache', { at: S.dataAt, email: S.user && S.user.email, data: d }); render();
         if (manual) toast('البيانات اتحدّثت.');
+        emit('data');
       });
   }
 
@@ -206,11 +211,12 @@
     return '<header class="head"><div class="head-row">' +
       (o.back ? '<button class="hbtn" data-act="back" aria-label="رجوع">' + IC.back + '</button>' : '<button class="hbtn" data-act="menu" aria-label="القائمة">' + IC.menu + '</button>') +
       (o.brand ? '<div class="brand">RENO</div>' : '<h1>' + esc(o.title) + '</h1>') +
-      (o.right ? '<button class="hbtn" data-act="' + o.right.act + '" aria-label="' + o.right.label + '">' + o.right.icon + '</button>' : '<span class="hbtn ghost"></span>') +
+      (o.chip ? '<span class="h-chip">' + esc(o.chip) + '</span>' : '') +
+      (o.right ? '<button class="hbtn" data-act="' + o.right.act + '"' + (o.right.to ? ' data-to="' + o.right.to + '"' : '') + ' aria-label="' + o.right.label + '">' + o.right.icon + (o.right.count ? '<i class="h-count num">' + num(o.right.count) + '</i>' : '') + '</button>' : (o.chip ? '' : '<span class="hbtn ghost"></span>')) +
       '</div><div class="netbar" role="status" hidden></div></header>';
   }
   function nav(on) {
-    var tabs = [['home', 'الرئيسية', IC.home], ['catalog', 'الكتالوج', IC.grid], ['scan', 'بيع', IC.plusCircle], ['sync', 'المزامنة', IC.sync], ['log', 'السجل', IC.list]];
+    var tabs = [['home', 'الرئيسية', IC.home], ['catalog', 'الكتالوج', IC.grid], ['sale', 'بيع', IC.plusCircle], ['sync', 'المزامنة', IC.sync], ['log', 'السجل', IC.list]];
     return '<nav class="nav" aria-label="التنقل">' + tabs.map(function (t) {
       return '<button data-act="tab" data-tab="' + t[0] + '"' + (t[0] === on ? ' class="on" aria-current="page"' : '') + '>' + t[2] + '<span>' + t[1] + '</span></button>';
     }).join('') + '</nav>';
@@ -234,7 +240,7 @@
     else if (S.offline) { cls += ' off'; st = 'حالة المزامنة وقت آخر تحديث'; ss = (sy.ok ? 'كانت شغّالة' : 'كان فيها مشكلة') + ' · آخر نبضة ' + timeAr(new Date(sy.last)); }
     else if (sy.ok) { st = 'المزامنة شغّالة'; ss = 'آخر تحديث ' + timeAr(new Date(sy.last)) + ' – متصل بشوبيفاي'; }
     else { cls += ' bad'; st = 'فيه مشكلة في المزامنة'; ss = 'آخر نبضة ' + timeAr(new Date(sy.last)); }
-    var tiles = [['scan', 'بيع جديد', IC.cart], ['catalog', 'الكتالوج', IC.grid], ['soon', 'جرد مخزون', IC.box], ['soon', 'المشتريات', IC.truck], ['soon', 'تسليم خامات', IC.scissors], ['soon', 'التقارير', IC.chart]];
+    var tiles = [['sale', 'بيع جديد', IC.cart], ['catalog', 'الكتالوج', IC.grid], ['soon', 'جرد مخزون', IC.box], ['soon', 'المشتريات', IC.truck], ['soon', 'تسليم خامات', IC.scissors], ['soon', 'التقارير', IC.chart]];
     return head({ brand: true, right: { act: 'search', label: 'بحث', icon: IC.search } }) +
       '<main class="view">' + strip() +
       '<section class="hello"><div><h2>أهلاً ' + esc(name) + '</h2><p>' + dateAr(now) + '</p></div><div class="avatar" aria-hidden="true">' + esc((name || 'ر').charAt(0)) + '</div></section>' +
@@ -313,7 +319,8 @@
       '<button class="add" data-act="add" aria-label="إضافة للفاتورة">' + IC.plus + '</button></div>';
   }
   function viewScan() {
-    return head({ back: true, title: 'مسح الباركود' }) +
+    var inCart = R.cartCount ? R.cartCount() : 0;
+    return head({ back: true, title: 'مسح الباركود', right: R.views.sale ? { act: 'nav', to: 'sale', label: 'الفاتورة', icon: IC.cart, count: inCart } : null }) +
       '<main class="view flush">' +
       '<section class="scan-stage" id="scan-stage"><video id="cam" playsinline muted></video><div class="shade"></div>' +
       '<div class="frame"><i></i><i></i><i></i><i></i><span class="laser"></span></div>' +
@@ -369,6 +376,7 @@
     if (p[0] === 'scan') return { name: 'scan' };
     if (p[0] === 'all') return { name: 'all' };
     if (p[0] === 's' && p[1]) return { name: 'section', id: p[1] };
+    if (R.views[p[0]]) return { name: p[0], sub: p[1] || '', ext: true };
     return { name: 'home' };
   }
   var current = null;
@@ -379,7 +387,7 @@
     if (LIVE && !S.token && !(S.offline && S.data)) { current = { name: 'login' }; app.innerHTML = viewLogin(); return; }
     if (!S.data) { current = { name: 'loading' }; app.innerHTML = S.netErr ? viewNetErr() : viewLoading(); return; }
     var was = current && current.name; current = r;
-    app.innerHTML = r.name === 'catalog' ? viewCatalog() : r.name === 'product' ? viewProduct(r.code) : r.name === 'scan' ? viewScan() : r.name === 'all' ? viewAll() : r.name === 'section' ? viewSection(r.id) : viewHome();
+    app.innerHTML = r.ext ? R.views[r.name](r) : r.name === 'catalog' ? viewCatalog() : r.name === 'product' ? viewProduct(r.code) : r.name === 'scan' ? viewScan() : r.name === 'all' ? viewAll() : r.name === 'section' ? viewSection(r.id) : viewHome();
     if (r.name === 'catalog') window.scrollTo(0, was === 'product' ? S.catScroll : 0); else window.scrollTo(0, 0);
     if (r.name === 'scan' && was !== 'scan') scanStart();
     else if (r.name === 'scan') scanAttach();
@@ -530,13 +538,13 @@
     if (a === 'scan') return go('scan');
     if (a === 'tab' || a === 'tile') {
       var t = b.getAttribute('data-tab') || b.getAttribute('data-to'); closeDrawer();
-      if (t === 'home' || t === 'catalog' || t === 'scan') return go(t);
+      if (t === 'home' || t === 'catalog' || t === 'scan' || t === 'sale') return go(t);
       return toast(t === 'sync' ? 'صفحة حالة المزامنة لسه ما اتبنتش. الحالة ظاهرة في الرئيسية.' : 'الصفحة دي لسه ما اتبنتش. هتتفعّل في مرحلتها.');
     }
     if (a === 'nav') { closeDrawer(); return go(b.getAttribute('data-to')); }
     if (a === 'page') { var to = b.getAttribute('data-to'); return to ? go(to) : toast('الصفحة دي لسه ما اتبنتش. هتتفعّل في مرحلتها.'); }
     if (a === 'soon') return toast('الصفحة دي لسه ما اتبنتش. هتتفعّل في مرحلتها.');
-    if (a === 'add') return toast('الإضافة للفاتورة هتشتغل مع نظام الفاتورة.');
+    if (R.acts[a]) return R.acts[a](b, e);
     if (a === 'open') return go('p/' + encodeURIComponent(b.getAttribute('data-code')));
     if (a === 'cat' || a === 'avail') {
       if (a === 'cat') S.cat = b.getAttribute('data-cat'); else S.avail = b.getAttribute('data-av');
@@ -558,10 +566,12 @@
     if (a === 'signout') return signOut();
   });
   document.addEventListener('input', function (e) {
+    for (var i = 0; i < R.inputs.length; i++) if (R.inputs[i](e)) return;
     if (e.target.id !== 'q') return;
     S.q = e.target.value; var c = $('.search .clear'); if (c) c.hidden = !S.q; $('#list').innerHTML = catalogList();
   });
   document.addEventListener('submit', function (e) {
+    if (e.target.hasAttribute('data-form')) { e.preventDefault(); var fa = R.acts[e.target.getAttribute('data-form')]; if (fa) fa(e.target, e); return; }
     if (e.target.id !== 'manual-form') return; e.preventDefault();
     var v = $('#manual-in').value; if (v.trim()) { onCode(v, 'manual'); $('#manual-in').value = ''; }
   });
@@ -571,8 +581,21 @@
     if (document.hidden) scanStop(); else scanStart();
   });
   window.addEventListener('offline', function () { if (LIVE && S.data) { S.offline = true; netChanged(); } });
-  window.addEventListener('online', function () { if (!LIVE || !S.offline) return; if (tokenFresh()) bootstrap(); else paintNet(); });
+  window.addEventListener('online', function () { emit('online'); if (!LIVE || !S.offline) return; if (tokenFresh()) bootstrap(); else paintNet(); });
   window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); S.installEvt = e; });
+
+  /* ---------- اللي الصفحات التانية بتستخدمه ---------- */
+  R.esc = esc; R.ar = ar; R.num = num; R.money = money; R.timeAr = timeAr; R.whenAr = whenAr; R.garment = garment; R.toast = toast; R.store = store; R.load = load;
+  R.head = head; R.nav = nav; R.go = go; R.render = render; R.IC = IC; R.rnd = rnd; R.resultCard = resultCard; R.scan = scan;
+  R.tokenFresh = tokenFresh; R.reconnect = reconnect; R.refresh = function () { return bootstrap(); }; R.reapply = function () { if (S.data) setData(S.data); };
+  /* طلب JSON لسكريبت: بيرجّع الرد، أو null لو الشبكة ما وصلتش. */
+  R.post = function (url, body, ms) {
+    var ac = window.AbortController ? new AbortController() : null, timer = setTimeout(function () { if (ac) { try { ac.abort(); } catch (e) { } } }, ms || 25000);
+    return fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body), signal: ac ? ac.signal : undefined })
+      .then(function (r) { return r.json().catch(function () { return { ok: false, error: 'server' }; }); }, function () { return null; })
+      .then(function (d) { clearTimeout(timer); return d; });
+  };
+  (window.RENO_EXT || []).forEach(function (f) { f(R); });
 
   /* ---------- التشغيل ---------- */
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {

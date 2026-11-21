@@ -1,12 +1,12 @@
 /* عامل الخدمة: بيخلّي التطبيق يفتح من غير نت.
    - الملفات اللي ليها رقم نسخة (?v=) والخطوط والأيقونات: من المحفوظ أولًا (ما بتتغيّرش من غير رقم جديد).
    - الصفحة نفسها: من الشبكة أولًا عشان التحديث يوصل فورًا، ولو الشبكة اتأخرت أو وقعت نرجع للمحفوظ. */
-var CACHE = 'reno-shell-v6';
-var SHELL = ['./', 'index.html', 'css/app.css?v=6', 'css/fonts.css?v=6',
+var CACHE = 'reno-shell-v7';
+var SHELL = ['./', 'index.html', 'css/app.css?v=7', 'css/fonts.css?v=7',
   'fonts/tajawal-arabic-400-normal.woff2', 'fonts/tajawal-arabic-500-normal.woff2', 'fonts/tajawal-arabic-700-normal.woff2', 'fonts/tajawal-arabic-800-normal.woff2',
   'fonts/tajawal-latin-400-normal.woff2', 'fonts/tajawal-latin-500-normal.woff2', 'fonts/tajawal-latin-700-normal.woff2', 'fonts/tajawal-latin-800-normal.woff2',
   'fonts/playfair-display-latin-700-normal.woff2',
-  'js/config.js?v=6', 'js/sample.js?v=6', 'js/icons.js?v=6', 'js/pages.js?v=6', 'js/app.js?v=6', 'vendor/zxing.min.js?v=0.21.3',
+  'js/config.js?v=7', 'js/sample.js?v=7', 'js/icons.js?v=7', 'js/pages.js?v=7', 'js/sale.js?v=7', 'js/app.js?v=7', 'vendor/zxing.min.js?v=0.21.3',
   'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-180.png'];
 var NET_WAIT = 3500;
 self.addEventListener('install', function (e) {
