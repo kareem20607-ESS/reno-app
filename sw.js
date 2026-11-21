@@ -1,6 +1,6 @@
 /* عامل الخدمة: بيخلّي هيكل التطبيق يفتح من غير نت. الشبكة أولًا عشان التحديثات توصل فورًا. */
-var CACHE = 'reno-shell-v1';
-var SHELL = ['./', 'index.html', 'css/app.css?v=1', 'css/fonts.css?v=1', 'fonts/tajawal-arabic-400-normal.woff2', 'fonts/tajawal-arabic-500-normal.woff2', 'fonts/tajawal-arabic-700-normal.woff2', 'fonts/tajawal-arabic-800-normal.woff2', 'fonts/tajawal-latin-400-normal.woff2', 'fonts/tajawal-latin-700-normal.woff2', 'fonts/playfair-display-latin-700-normal.woff2', 'js/config.js?v=1', 'js/sample.js?v=1', 'js/icons.js?v=1', 'js/app.js?v=1', 'manifest.webmanifest', 'icons/icon-192.png'];
+var CACHE = 'reno-shell-v2';
+var SHELL = ['./', 'index.html', 'css/app.css?v=2', 'css/fonts.css?v=2', 'fonts/tajawal-arabic-400-normal.woff2', 'fonts/tajawal-arabic-500-normal.woff2', 'fonts/tajawal-arabic-700-normal.woff2', 'fonts/tajawal-arabic-800-normal.woff2', 'fonts/tajawal-latin-400-normal.woff2', 'fonts/tajawal-latin-700-normal.woff2', 'fonts/playfair-display-latin-700-normal.woff2', 'js/config.js?v=2', 'js/sample.js?v=2', 'js/icons.js?v=2', 'js/app.js?v=2', 'manifest.webmanifest', 'icons/icon-192.png'];
 self.addEventListener('install', function (e) { e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(SHELL); }).then(function () { return self.skipWaiting(); })); });
 self.addEventListener('activate', function (e) {
   e.waitUntil(caches.keys().then(function (ks) { return Promise.all(ks.filter(function (k) { return k !== CACHE; }).map(function (k) { return caches.delete(k); })); }).then(function () { return self.clients.claim(); }));
