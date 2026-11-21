@@ -403,7 +403,7 @@
   /* ---------- القائمة الجانبية ---------- */
   function openDrawer() {
     var d = $('#drawer'), u = S.user || {}, name = u.name || (S.data && S.data.user && S.data.user.name) || 'رينو';
-    var p = S.perf, lines = ['نسخة التجربة ' + esc(CFG.BUILD || '')];
+    var p = S.perf, lines = ['نسخة التجربة <span class="ltr">' + esc(CFG.BUILD || '') + '</span>'];
     if (p.loadMs != null) lines.push('تحميل البيانات: ' + secs(p.loadMs) + ' ث');
     if (p.scanMs != null) lines.push('آخر مسح: ' + secs(p.scanMs) + ' ث');
     d.innerHTML = '<div class="dr-head"><div class="avatar">' + esc(name.charAt(0)) + '</div><div><b>' + esc(name) + '</b><small>' + esc(u.email || (LIVE ? '' : 'بيانات عيّنة')) + '</small></div></div>' +
