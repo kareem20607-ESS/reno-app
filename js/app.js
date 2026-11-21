@@ -1,4 +1,4 @@
-/* واجهة رينو الخاصة — تجربة المرحلة ١: الرئيسية، الكتالوج، تفاصيل المنتج، المسح بالكاميرا. */
+/* واجهة رينو الخاصة: الدخول، الرئيسية، القائمة والأقسام، الكتالوج، تفاصيل المنتج، المسح بالكاميرا، والقراءة من غير نت. */
 (function () {
   'use strict';
   var CFG = window.RENO_CONFIG || {};
@@ -10,7 +10,8 @@
     q: '', cat: 'الكل', avail: 'all', filterOpen: false, catScroll: 0,
     token: null, user: null, loginErr: '',
     perf: { loadMs: null, scanMs: null, engine: '' },
-    loading: false, installEvt: null
+    loading: false, installEvt: null,
+    offline: false, dataAt: null, netErr: false
   };
 
   /* ---------- أدوات ---------- */
@@ -34,6 +35,12 @@
     if (/بناطيل/.test(cat)) return window.GARMENT.pants;
     if (/بيجامات|ساتان|أطقم|تيشيرتات|بلايز|ترينجات|جواكت/.test(cat)) return window.GARMENT.top;
     return window.GARMENT.hanger;
+  }
+  /* وقت آخر نسخة بيانات: «النهارده ٢:١٠ م»، «إمبارح ٩:٠٥ م»، أو التاريخ. */
+  function whenAr(ms) {
+    var d = new Date(ms), n = new Date(), y = new Date(n.getTime() - 864e5);
+    var day = d.toDateString() === n.toDateString() ? 'النهارده' : d.toDateString() === y.toDateString() ? 'إمبارح' : ar(d.getDate() + '/' + (d.getMonth() + 1));
+    return day + ' ' + timeAr(d);
   }
   var toastT;
   function toast(msg) { var t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(function () { t.hidden = true; }, 3200); }
@@ -108,6 +115,7 @@
   function signOut() {
     try { sessionStorage.removeItem('reno_idt'); } catch (e) { }
     store('reno_cache', null); S.token = null; S.user = null; S.data = null; S.models = [];
+    S.offline = false; S.dataAt = null; S.netErr = false;
     store('reno_hint', null); store('reno_nonce', null);
     closeDrawer(); render();
   }
@@ -116,29 +124,80 @@
     bad_token: 'جلسة الدخول انتهت. سجّلي الدخول تاني.', no_token: 'سجّلي الدخول الأول.',
     server: 'حصلت مشكلة في قراءة البيانات. جرّبي تاني بعد دقيقة.'
   };
-  function bootstrap() {
-    if (!LIVE) return;
-    S.loading = true; if (!S.data) render();
-    var t0 = performance.now();
-    fetch(CFG.API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'bootstrap', idToken: S.token }) })
-      .then(function (r) { return r.json(); })
+  /* ---------- الشغل من غير نت ----------
+     آخر نسخة بيانات بتفضل على الجهاز. لو مفيش نت، التطبيق بيفتح بيها (للقراءة والمسح) لحد ٢٤ ساعة من آخر تحديث،
+     ولنفس الحساب اللي كان داخل بس. تسجيل الخروج بيمسحها. */
+  var OFFLINE_MAX = 24 * 3600 * 1000, PROBE = 'https://www.gstatic.com/generate_204';
+  function usableCache() {
+    var c = load('reno_cache'), h = load('reno_hint');
+    return c && c.data && c.at && h && c.email === h && Date.now() - c.at < OFFLINE_MAX ? c : null;
+  }
+  /* بيتأكد إن جوجل واصل فعلًا قبل ما نحوّل الصفحة ليه؛ التحويل من غير نت بيسيب المستخدمة على صفحة خطأ. */
+  function probe() {
+    if (navigator.onLine === false) return Promise.resolve(false);
+    return new Promise(function (res) {
+      var done = false, ac = window.AbortController ? new AbortController() : null;
+      function fin(v) { if (done) return; done = true; clearTimeout(t); if (!v && ac) { try { ac.abort(); } catch (e) { } } res(v); }
+      var t = setTimeout(function () { fin(false); }, 3000);
+      fetch(PROBE, { mode: 'no-cors', cache: 'no-store', signal: ac ? ac.signal : undefined }).then(function () { fin(true); }, function () { fin(false); });
+    });
+  }
+  function goOffline(c) {
+    S.offline = true; S.dataAt = c.at; S.loginErr = '';
+    S.user = { name: (c.data.user && c.data.user.name) || '', email: c.email };
+    setData(c.data); render();
+  }
+  /* الدخول بعد التأكد من الاتصال. من غير نت: آخر نسخة لو موجودة، وإلا رسالة واضحة. */
+  function tryLogin(silent) {
+    return probe().then(function (up) {
+      if (up) { if (silent) { try { sessionStorage.setItem('reno_silent', '1'); } catch (e) { } } return startLogin(silent); }
+      if (S.data) { S.offline = true; netChanged(); toast('لسه مفيش اتصال بالنت.'); return; }
+      var c = usableCache(); if (c) return goOffline(c);
+      S.loginErr = 'مفيش اتصال بالنت. افتحي النت وجرّبي تاني.'; render();
+    });
+  }
+  /* زر «تحديث»: بجلسة شغّالة بنقرا البيانات، ومن غيرها بنجدّد الدخول الأول. */
+  function tokenFresh() { var p = S.token && parseJwt(S.token); return !!(p && p.exp * 1000 > Date.now() + 30000); }
+  function reconnect() { if (tokenFresh()) return bootstrap(true); return tryLogin(true); }
+  /* تغيّر حالة الاتصال: الرئيسية بتترسم تاني (كارت المزامنة)، وباقي الشاشات الشريط بس عشان البحث والكاميرا ما يتقطعوش. */
+  function netChanged() { if (current && current.name === 'home') render(); else paintNet(); }
+  function paintNet() {
+    var el = $('.netbar'); if (!el) return;
+    if (!LIVE || !S.offline || !S.data) { el.hidden = true; el.innerHTML = ''; return; }
+    el.innerHTML = '<span>' + (navigator.onLine === false ? 'من غير نت' : 'البيانات ما اتحدّثتش') + (S.dataAt ? ' · آخر تحديث ' + whenAr(S.dataAt) : '') + '</span><button data-act="retry">تحديث</button>';
+    el.hidden = false;
+  }
+
+  function bootstrap(manual) {
+    if (!LIVE || S.loading) return;
+    S.loading = true; S.netErr = false; if (!S.data) render();
+    var t0 = performance.now(), ac = window.AbortController ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ac) { try { ac.abort(); } catch (e) { } } }, 25000);
+    fetch(CFG.API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'bootstrap', idToken: S.token }), signal: ac ? ac.signal : undefined })
+      .then(function (r) { return r.json().catch(function () { return { ok: false, error: 'server' }; }); }, function () { return null; })
       .then(function (d) {
-        S.loading = false;
-        if (!d || !d.ok) {
-          var code = (d && d.error) || 'server';
+        clearTimeout(timer); S.loading = false;
+        if (d === null) { /* الشبكة ما وصلتش */
+          if (S.data) { S.offline = true; netChanged(); if (manual) toast('لسه مفيش اتصال. اللي ظاهر آخر نسخة اتحمّلت.'); }
+          else { S.netErr = true; render(); }
+          return;
+        }
+        if (!d.ok) {
+          var code = d.error || 'server';
           if (code === 'not_allowed' || code === 'bad_token' || code === 'no_token') {
             setToken(null);
             if (code !== 'not_allowed' && !S.fresh && load('reno_hint')) return startLogin(true);
-            S.loginErr = ERR[code]; store('reno_cache', null); S.data = null; render();
+            S.loginErr = ERR[code]; store('reno_cache', null); S.data = null; S.offline = false; S.dataAt = null; render();
           }
-          else { toast(ERR.server); render(); }
+          else if (S.data) { toast(ERR.server); paintNet(); }
+          else { S.netErr = true; render(); }
           return;
         }
-        S.perf.loadMs = performance.now() - t0;
+        S.perf.loadMs = performance.now() - t0; S.offline = false; S.dataAt = Date.now();
         if (d.user && d.user.name && S.user) S.user.name = d.user.name;
-        setData(d); store('reno_cache', { at: Date.now(), email: S.user && S.user.email, data: d }); render();
-      })
-      .catch(function () { S.loading = false; toast(S.data ? 'مفيش اتصال. اللي ظاهر آخر نسخة اتحمّلت.' : ERR.server); render(); });
+        setData(d); store('reno_cache', { at: S.dataAt, email: S.user && S.user.email, data: d }); render();
+        if (manual) toast('البيانات اتحدّثت.');
+      });
   }
 
   /* ---------- القوالب ---------- */
@@ -148,7 +207,7 @@
       (o.back ? '<button class="hbtn" data-act="back" aria-label="رجوع">' + IC.back + '</button>' : '<button class="hbtn" data-act="menu" aria-label="القائمة">' + IC.menu + '</button>') +
       (o.brand ? '<div class="brand">RENO</div>' : '<h1>' + esc(o.title) + '</h1>') +
       (o.right ? '<button class="hbtn" data-act="' + o.right.act + '" aria-label="' + o.right.label + '">' + o.right.icon + '</button>' : '<span class="hbtn ghost"></span>') +
-      '</div></header>';
+      '</div><div class="netbar" role="status" hidden></div></header>';
   }
   function nav(on) {
     var tabs = [['home', 'الرئيسية', IC.home], ['catalog', 'الكتالوج', IC.grid], ['scan', 'بيع', IC.plusCircle], ['sync', 'المزامنة', IC.sync], ['log', 'السجل', IC.list]];
@@ -172,6 +231,7 @@
     if (y > 0) { var pc = Math.round((t - y) / y * 100); sub = '<span class="k-sub ' + (pc >= 0 ? 'up' : 'down') + ' num">' + (pc >= 0 ? '▲' : '▼') + ' ' + num(Math.abs(pc)) + '٪</span>'; }
     var sy = d.sync || {}, cls = 'sync', st, ss;
     if (d.demo || sy.last == null) { cls += ' off'; st = 'حالة المزامنة'; ss = 'بتظهر هنا بعد تفعيل الدخول'; }
+    else if (S.offline) { cls += ' off'; st = 'حالة المزامنة وقت آخر تحديث'; ss = (sy.ok ? 'كانت شغّالة' : 'كان فيها مشكلة') + ' · آخر نبضة ' + timeAr(new Date(sy.last)); }
     else if (sy.ok) { st = 'المزامنة شغّالة'; ss = 'آخر تحديث ' + timeAr(new Date(sy.last)) + ' – متصل بشوبيفاي'; }
     else { cls += ' bad'; st = 'فيه مشكلة في المزامنة'; ss = 'آخر نبضة ' + timeAr(new Date(sy.last)); }
     var tiles = [['scan', 'بيع جديد', IC.cart], ['catalog', 'الكتالوج', IC.grid], ['soon', 'جرد مخزون', IC.box], ['soon', 'المشتريات', IC.truck], ['soon', 'تسليم خامات', IC.scissors], ['soon', 'التقارير', IC.chart]];
@@ -293,6 +353,10 @@
       '<button class="btn login-btn" data-act="login">الدخول بحساب جوجل</button>' +
       '<small class="login-note">هتتحوّلي لصفحة جوجل وترجعي هنا تلقائي.</small></div></div>';
   }
+  function viewNetErr() {
+    return head({ brand: true }) + '<main class="view"><div class="empty"><b>البيانات ما وصلتش</b>اتأكدي إن النت شغّال وجرّبي تاني.' +
+      '<div style="margin-top:16px"><button class="btn" data-act="retry">جرّبي تاني</button></div></div></main>' + nav('home');
+  }
   function viewLoading() {
     return head({ brand: true }) + '<main class="view"><div class="skeleton" style="height:64px"></div><div class="skeleton" style="height:104px"></div><div class="skeleton"></div><div class="skeleton"></div></main>' + nav('home');
   }
@@ -312,13 +376,14 @@
     var r = route();
     if (current && current.name === 'catalog' && r.name !== 'catalog') S.catScroll = window.scrollY;
     if (current && current.name === 'scan' && r.name !== 'scan') scanStop();
-    if (LIVE && !S.token) { current = { name: 'login' }; app.innerHTML = viewLogin(); return; }
-    if (!S.data) { current = { name: 'loading' }; app.innerHTML = viewLoading(); return; }
+    if (LIVE && !S.token && !(S.offline && S.data)) { current = { name: 'login' }; app.innerHTML = viewLogin(); return; }
+    if (!S.data) { current = { name: 'loading' }; app.innerHTML = S.netErr ? viewNetErr() : viewLoading(); return; }
     var was = current && current.name; current = r;
     app.innerHTML = r.name === 'catalog' ? viewCatalog() : r.name === 'product' ? viewProduct(r.code) : r.name === 'scan' ? viewScan() : r.name === 'all' ? viewAll() : r.name === 'section' ? viewSection(r.id) : viewHome();
     if (r.name === 'catalog') window.scrollTo(0, was === 'product' ? S.catScroll : 0); else window.scrollTo(0, 0);
     if (r.name === 'scan' && was !== 'scan') scanStart();
     else if (r.name === 'scan') scanAttach();
+    paintNet();
   }
   function go(h) { if (location.hash === '#' + h) render(); else location.hash = h; }
 
@@ -429,6 +494,7 @@
   function openDrawer() {
     var d = $('#drawer'), u = S.user || {}, name = u.name || (S.data && S.data.user && S.data.user.name) || 'رينو';
     var p = S.perf, lines = ['نسخة <span class="ltr">' + esc(CFG.BUILD || '') + '</span>'];
+    if (LIVE && S.dataAt) lines.push('آخر تحديث ' + whenAr(S.dataAt));
     if (p.loadMs != null) lines.push('تحميل البيانات ' + secs(p.loadMs) + ' ث');
     if (p.scanMs != null) lines.push('آخر مسح ' + secs(p.scanMs) + ' ث');
     d.innerHTML = '<div class="dr-title">RENO STORE</div>' +
@@ -457,7 +523,8 @@
     var b = e.target.closest('[data-act]'); if (!b) return;
     var a = b.getAttribute('data-act');
     if (a === 'menu') return openDrawer();
-    if (a === 'login') { b.disabled = true; b.textContent = 'بنحوّلك لجوجل…'; return startLogin(false); }
+    if (a === 'login') { b.disabled = true; b.textContent = 'بنحوّلك لجوجل…'; return tryLogin(false); }
+    if (a === 'retry') { b.disabled = true; toast('بنحدّث البيانات…'); return reconnect(); }
     if (a === 'back') { if (history.length > 1 && current && current.name !== 'home') history.back(); else go('home'); return; }
     if (a === 'search') { go('catalog'); setTimeout(function () { var q = $('#q'); if (q) q.focus(); }, 60); return; }
     if (a === 'scan') return go('scan');
@@ -486,7 +553,7 @@
       $('#manual-box').innerHTML = '<form class="manual" id="manual-form"><input id="manual-in" inputmode="latin" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="RN000001" aria-label="الباركود"><button class="btn" type="submit">بحث</button></form>';
       $('#manual-in').focus(); return;
     }
-    if (a === 'refresh') { closeDrawer(); toast('بنحدّث البيانات…'); return bootstrap(); }
+    if (a === 'refresh') { closeDrawer(); toast('بنحدّث البيانات…'); return reconnect(); }
     if (a === 'install') return install();
     if (a === 'signout') return signOut();
   });
@@ -503,6 +570,8 @@
     if (!current || current.name !== 'scan') return;
     if (document.hidden) scanStop(); else scanStart();
   });
+  window.addEventListener('offline', function () { if (LIVE && S.data) { S.offline = true; netChanged(); } });
+  window.addEventListener('online', function () { if (!LIVE || !S.offline) return; if (tokenFresh()) bootstrap(); else paintNet(); });
   window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); S.installEvt = e; });
 
   /* ---------- التشغيل ---------- */
@@ -514,11 +583,13 @@
     var came = finishLogin(), saved = null;
     if (!S.token) { try { saved = sessionStorage.getItem('reno_idt'); } catch (e) { } if (saved) setToken(saved); }
     if (S.token) {
-      var c = load('reno_cache'); if (c && c.data && c.email === S.user.email) setData(c.data);
+      var c = load('reno_cache'); if (c && c.data && c.email === S.user.email) { S.dataAt = c.at || null; setData(c.data); }
       render(); bootstrap();
     } else {
       var tried = null; try { tried = sessionStorage.getItem('reno_silent'); } catch (e) { }
-      if (!came && !tried && load('reno_hint')) { try { sessionStorage.setItem('reno_silent', '1'); } catch (e) { } startLogin(true); }
+      var oc = came ? null : usableCache();
+      if (!came && !tried && load('reno_hint')) tryLogin(true);       /* شاشة البداية فاضلة لحد ما نعرف فيه نت ولا لأ */
+      else if (oc && navigator.onLine === false) goOffline(oc);
       else render();
     }
   }

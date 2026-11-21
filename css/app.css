@@ -55,6 +55,11 @@ input { font: inherit; color: inherit; }
 .hbtn:active { background: rgba(255, 255, 255, .12); }
 .hbtn .ic { width: 26px; height: 26px; }
 .hbtn.ghost { visibility: hidden; }
+/* شريط «من غير نت»: بيظهر تحت الرأس لما اللي معروض آخر نسخة محفوظة */
+.netbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; padding: 6px var(--gut); background: var(--gold-bg); color: var(--gold); border-bottom: 1px solid var(--gold-line); font-size: 13px; font-weight: 500; line-height: 1.4; }
+.netbar span { min-width: 0; }
+.netbar button { flex: none; height: 32px; padding: 0 14px; border-radius: 999px; background: #fff; border: 1px solid var(--gold-line); color: var(--gold); font-weight: 700; font-size: 13px; }
+.netbar button:disabled { opacity: .55; }
 
 /* المحتوى */
 .view { flex: 1; padding: 16px var(--gut) calc(var(--nav-h) + var(--sab) + 20px); display: flex; flex-direction: column; gap: 16px; min-width: 0; }

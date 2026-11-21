@@ -1,15 +1,42 @@
-/* عامل الخدمة: بيخلّي هيكل التطبيق يفتح من غير نت. الشبكة أولًا عشان التحديثات توصل فورًا. */
-var CACHE = 'reno-shell-v5';
-var SHELL = ['./', 'index.html', 'css/app.css?v=5', 'css/fonts.css?v=5', 'fonts/tajawal-arabic-400-normal.woff2', 'fonts/tajawal-arabic-500-normal.woff2', 'fonts/tajawal-arabic-700-normal.woff2', 'fonts/tajawal-arabic-800-normal.woff2', 'fonts/tajawal-latin-400-normal.woff2', 'fonts/tajawal-latin-700-normal.woff2', 'fonts/playfair-display-latin-700-normal.woff2', 'js/config.js?v=5', 'js/sample.js?v=5', 'js/icons.js?v=5', 'js/pages.js?v=5', 'js/app.js?v=5', 'manifest.webmanifest', 'icons/icon-192.png'];
-self.addEventListener('install', function (e) { e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(SHELL); }).then(function () { return self.skipWaiting(); })); });
+/* عامل الخدمة: بيخلّي التطبيق يفتح من غير نت.
+   - الملفات اللي ليها رقم نسخة (?v=) والخطوط والأيقونات: من المحفوظ أولًا (ما بتتغيّرش من غير رقم جديد).
+   - الصفحة نفسها: من الشبكة أولًا عشان التحديث يوصل فورًا، ولو الشبكة اتأخرت أو وقعت نرجع للمحفوظ. */
+var CACHE = 'reno-shell-v6';
+var SHELL = ['./', 'index.html', 'css/app.css?v=6', 'css/fonts.css?v=6',
+  'fonts/tajawal-arabic-400-normal.woff2', 'fonts/tajawal-arabic-500-normal.woff2', 'fonts/tajawal-arabic-700-normal.woff2', 'fonts/tajawal-arabic-800-normal.woff2',
+  'fonts/tajawal-latin-400-normal.woff2', 'fonts/tajawal-latin-500-normal.woff2', 'fonts/tajawal-latin-700-normal.woff2', 'fonts/tajawal-latin-800-normal.woff2',
+  'fonts/playfair-display-latin-700-normal.woff2',
+  'js/config.js?v=6', 'js/sample.js?v=6', 'js/icons.js?v=6', 'js/pages.js?v=6', 'js/app.js?v=6', 'vendor/zxing.min.js?v=0.21.3',
+  'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-180.png'];
+var NET_WAIT = 3500;
+self.addEventListener('install', function (e) {
+  e.waitUntil(caches.open(CACHE).then(function (c) {
+    return c.addAll(SHELL.map(function (u) { return new Request(u, { cache: 'reload' }); }));
+  }).then(function () { return self.skipWaiting(); }));
+});
 self.addEventListener('activate', function (e) {
   e.waitUntil(caches.keys().then(function (ks) { return Promise.all(ks.filter(function (k) { return k !== CACHE; }).map(function (k) { return caches.delete(k); })); }).then(function () { return self.clients.claim(); }));
 });
+function keep(req, res) { if (res && res.ok) { var copy = res.clone(); caches.open(CACHE).then(function (c) { c.put(req, copy); }); } return res; }
+function saved(req) {
+  return caches.match(req).then(function (m) { return m || (req.mode === 'navigate' ? caches.match('index.html') : undefined); });
+}
+function cacheFirst(req) {
+  return caches.match(req).then(function (m) { return m || fetch(req).then(function (res) { return keep(req, res); }); });
+}
+function netFirst(req) {
+  return new Promise(function (resolve, reject) {
+    var done = false;
+    function finish(r) { if (!done && r) { done = true; clearTimeout(t); resolve(r); return true; } return false; }
+    var t = setTimeout(function () { saved(req).then(finish); }, NET_WAIT);
+    fetch(req).then(function (res) { keep(req, res); finish(res); }, function () {
+      saved(req).then(function (m) { if (!finish(m) && !done) { done = true; clearTimeout(t); reject(new TypeError('offline')); } });
+    });
+  });
+}
 self.addEventListener('fetch', function (e) {
   var req = e.request, url = new URL(req.url);
   if (req.method !== 'GET' || url.origin !== self.location.origin) return;
-  e.respondWith(fetch(req).then(function (res) {
-    if (res && res.ok) { var copy = res.clone(); caches.open(CACHE).then(function (c) { c.put(req, copy); }); }
-    return res;
-  }).catch(function () { return caches.match(req).then(function (m) { return m || caches.match('index.html'); }); }));
+  var fixed = url.searchParams.has('v') || /\/(fonts|icons|vendor)\//.test(url.pathname);
+  e.respondWith(fixed ? cacheFirst(req) : netFirst(req));
 });
