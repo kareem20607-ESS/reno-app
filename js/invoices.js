@@ -25,6 +25,7 @@
     var o = { no: String(r[0] || ''), inv: String(r[1] || ''), day: String(r[2] || ''), channel: String(r[3] || ''), phone: String(r[4] || ''), name: String(r[5] || ''),
       pay: String(r[6] || ''), gross: Number(r[7]) || 0, disc: Number(r[8]) || 0, net: Number(r[9]) || 0, status: String(r[10] || ''), seller: String(r[11] || ''), notes: String(r[12] || ''), lines: r[13] || [] };
     o.ship = shipFee(o.notes); o.due = o.net + o.ship;
+    o.track = String(r[14] || ''); o.shipAt = String(r[15] || ''); o.doneAt = String(r[16] || '');
     o.cancelled = o.status === CANCEL; o.returned = o.status === RETURNED;
     o.payState = o.cancelled ? 'cancelled' : o.returned ? 'returned' : o.pay === COD ? 'collecting' : 'paid';
     o.shop = o.no.charAt(0) === '#';
@@ -45,6 +46,12 @@
   function dateLong(day) { var d = dateOf(day); return d ? ar(d.getDate()) + ' ' + MONTHS[d.getMonth()] + ' ' + ar(d.getFullYear()) : ''; }
   function dateShort(day) { var d = dateOf(day); return d ? ar(d.getDate()) + ' ' + MONTHS[d.getMonth()] : ''; }
   /* رقم الفاتورة بأرقام عربية؛ الرقم اللي فيه حروف لاتيني (رقم طلب المتجر أو ORD) بيفضل زي ما هو */
+  /* 'YYYY-MM-DD HH:mm' ← «١٩ نوفمبر ٣:٢٩ م» */
+  function whenShort(t) {
+    var m = /^(\d{4}-\d{2}-\d{2}) (\d{2}):(\d{2})$/.exec(t); if (!m) return dateShort(String(t).slice(0, 10));
+    var h = Number(m[2]);
+    return dateShort(m[1]) + ' ' + ar((h % 12 || 12) + ':' + m[3]) + ' ' + (h < 12 ? 'ص' : 'م');
+  }
   function ltr(s) { s = String(s); return '<span class="ltr-n" dir="ltr">' + esc(/[A-Za-z]/.test(s) ? s : ar(s)) + '</span>'; }
   function egp(n) { return '<span class="num">' + num(n) + '</span> ج.م'; }
   function pieces(n) { return n === 1 ? 'قطعة واحدة' : n === 2 ? 'قطعتين' : n <= 10 ? num(n) + ' قطع' : num(n) + ' قطعة'; }
@@ -82,7 +89,7 @@
   /* ---------- القائمة ---------- */
   function match(o, q) {
     if (!q) return true;
-    var hay = (o.inv + ' ' + o.no + ' ' + o.name + ' ' + o.phone + ' ' + o.channel).toLowerCase();
+    var hay = (o.inv + ' ' + o.no + ' ' + o.name + ' ' + o.phone + ' ' + o.channel + ' ' + o.track).toLowerCase();
     var plain = q.toLowerCase().replace(/[٠-٩]/g, function (d) { return '٠١٢٣٤٥٦٧٨٩'.indexOf(d); });
     return plain.split(/\s+/).every(function (w) { return hay.indexOf(w) >= 0; });
   }
@@ -131,7 +138,7 @@
       '<button class="hbtn" data-act="i-search" aria-label="بحث في الفواتير" aria-pressed="' + ui.search + '">' + IX.search + '</button>' +
       '<button class="hbtn" data-act="nav" data-to="sale" aria-label="فاتورة جديدة">' + IX.plus + '</button></div><div class="netbar" role="status" hidden></div></header>' +
       '<main class="view inv">' +
-      (ui.search ? '<label class="search tall">' + IX.search + '<input id="i-q" type="search" inputmode="search" autocomplete="off" placeholder="رقم الفاتورة، اسم العميلة، أو الموبايل" value="' + esc(ui.q) + '" aria-label="بحث في الفواتير"><button type="button" class="clear" data-act="i-clear" aria-label="مسح البحث">' + IX.clear + '</button></label>' : '') +
+      (ui.search ? '<label class="search tall">' + IX.search + '<input id="i-q" type="search" inputmode="search" autocomplete="off" placeholder="رقم الفاتورة أو البوليصة، الاسم، أو الموبايل" value="' + esc(ui.q) + '" aria-label="بحث في الفواتير"><button type="button" class="clear" data-act="i-clear" aria-label="مسح البحث">' + IX.clear + '</button></label>' : '') +
       '<div class="inv-kpis">' + kpi('مبيعات اليوم', '<span class="num">' + num(sales) + '</span> <small>ج.م</small>') + kpi('فواتير اليوم', '<span class="num">' + num(count) + '</span>') +
       kpi('قيد التحصيل', '<span class="num">' + num(info.collecting || 0) + '</span> <small>ج.م</small>', 'gold') + '</div>' +
       '<div class="inv-two"><button data-act="i-soon" data-what="match">' + IX.bank + 'مطابقة تحويل</button><button data-act="i-soon" data-what="close">' + IX.lock + 'إقفال اليومية</button></div>' +
@@ -151,7 +158,7 @@
       names.map(function (n, i) {
         var st = i < cur ? 'done' : i === cur ? 'cur' : 'todo';
         return '<li class="' + st + '"' + (st === 'cur' ? ' aria-current="step"' : '') + '><span class="dot">' + (st === 'done' ? IX.check : st === 'cur' ? '<i></i>' : '') + '</span><b>' + n + '</b>' +
-          '<small>' + (i === 0 ? dateShort(o.day) : st === 'done' ? 'تم' : st === 'cur' ? 'دلوقتي' : 'لسه') + '</small></li>';
+          '<small>' + (i === 0 ? dateShort(o.day) : (i === 2 && o.shipAt && st !== 'todo') ? dateShort(o.shipAt.slice(0, 10)) : (i === 3 && o.doneAt && st === 'done') ? dateShort(o.doneAt.slice(0, 10)) : st === 'done' ? 'تم' : st === 'cur' ? 'دلوقتي' : 'لسه') + '</small></li>';
       }).join('') + '</ol></section>';
   }
   function statusLine(o) {
@@ -189,7 +196,8 @@
       '<div class="inv-due' + (o.cancelled || o.returned ? ' off' : '') + '"><b class="num">' + num(o.due) + '</b><i>ج.م</i><span>' + (o.cancelled || o.returned ? 'قيمة الفاتورة' : 'المطلوب من العميلة') + '</span></div>' +
       '<p class="inv-say">' + statusLine(o) + '</p>' +
       '<p class="inv-meta">' + [dateLong(o.day), esc(o.channel), o.shop ? 'من المتجر' : (o.seller ? 'البائعة ' + esc(o.seller) : '')].filter(Boolean).join('، ') + '</p>' +
-      (o.shop && o.inv ? '<p class="inv-meta">رقم الطلب في المتجر ' + ltr(o.no) + '</p>' : '') + '</section>' +
+      (o.shop && o.inv ? '<p class="inv-meta">رقم الطلب في المتجر ' + ltr(o.no) + '</p>' : '') +
+      (o.track ? '<p class="inv-meta">بوليصة الشحن ' + ltr(o.track) + (o.doneAt ? '، اتسلّمت ' + whenShort(o.doneAt) : o.shipAt ? '، اتشحنت ' + whenShort(o.shipAt) : '') + '</p>' : '') + '</section>' +
       stages(o) +
       '<section class="card inv-cust"><span class="inv-av">' + IX.user + '</span><div><b>' + esc(o.name || 'عميلة من غير اسم') + '</b>' + (o.phone ? '<span class="ltr-n" dir="ltr">' + esc(ar(phoneShow(o.phone))) + '</span>' : '<span>من غير موبايل</span>') + '</div>' +
       (o.phone ? '<a class="inv-ibtn" href="tel:' + esc(o.phone.replace(/[^\d+]/g, '')) + '" aria-label="اتصال بالعميلة">' + IX.phone + '</a>' : '') +

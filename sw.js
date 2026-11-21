@@ -1,12 +1,12 @@
 /* عامل الخدمة: بيخلّي التطبيق يفتح من غير نت.
    - الملفات اللي ليها رقم نسخة (?v=) والخطوط والأيقونات: من المحفوظ أولًا (ما بتتغيّرش من غير رقم جديد).
    - الصفحة نفسها: من الشبكة أولًا عشان التحديث يوصل فورًا، ولو الشبكة اتأخرت أو وقعت نرجع للمحفوظ. */
-var CACHE = 'reno-shell-v8';
-var SHELL = ['./', 'index.html', 'css/app.css?v=8', 'css/fonts.css?v=8',
+var CACHE = 'reno-shell-v9';
+var SHELL = ['./', 'index.html', 'css/app.css?v=9', 'css/fonts.css?v=9',
   'fonts/tajawal-arabic-400-normal.woff2', 'fonts/tajawal-arabic-500-normal.woff2', 'fonts/tajawal-arabic-700-normal.woff2', 'fonts/tajawal-arabic-800-normal.woff2',
   'fonts/tajawal-latin-400-normal.woff2', 'fonts/tajawal-latin-500-normal.woff2', 'fonts/tajawal-latin-700-normal.woff2', 'fonts/tajawal-latin-800-normal.woff2',
   'fonts/playfair-display-latin-700-normal.woff2',
-  'js/config.js?v=8', 'js/sample.js?v=8', 'js/icons.js?v=8', 'js/pages.js?v=8', 'js/sale.js?v=8', 'js/invoices.js?v=8', 'js/app.js?v=8', 'vendor/zxing.min.js?v=0.21.3',
+  'js/config.js?v=9', 'js/sample.js?v=9', 'js/icons.js?v=9', 'js/pages.js?v=9', 'js/sale.js?v=9', 'js/invoices.js?v=9', 'js/app.js?v=9', 'vendor/zxing.min.js?v=0.21.3',
   'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-180.png'];
 var NET_WAIT = 3500;
 self.addEventListener('install', function (e) {
