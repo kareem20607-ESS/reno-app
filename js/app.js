@@ -266,6 +266,26 @@
       '<div class="card" id="manual-box"><button class="act center" data-act="manual">' + IC.barcode + '<span>إدخال الباركود يدويًا</span></button></div>' +
       '</div></main>' + nav('scan');
   }
+  function pageBtn(pg, cls) {
+    return '<button class="card ' + cls + (pg.to ? '' : ' soon') + '" data-act="page" data-to="' + esc(pg.to || '') + '">' +
+      '<span class="pg-top"><span class="pg-ic">' + lu(pg.i) + '</span>' + (pg.to ? '' : '<span class="tag">قريبًا</span>') + '</span>' +
+      (cls === 'pg-card' ? '<span class="pg-txt"><b>' + esc(pg.n) + '</b><small>' + esc(pg.d) + '</small></span>' : '<span class="pg-name">' + esc(pg.n) + '</span>') + '</button>';
+  }
+  function viewSection(id) {
+    var sec = PAGES.filter(function (x) { return x.id === id; })[0];
+    if (!sec) return head({ back: true, title: 'القائمة' }) + '<main class="view"><div class="empty"><b>القسم ده مش موجود</b></div></main>' + nav('');
+    return head({ back: true, title: sec.n }) +
+      '<main class="view"><p class="lead num">' + countAr(sec.pages.length) + ' | ' + esc(sec.d) + '</p>' +
+      '<section class="pg-grid">' + sec.pages.map(function (pg) { return pageBtn(pg, 'pg-card'); }).join('') + '</section></main>' + nav('');
+  }
+  function viewAll() {
+    return head({ back: true, title: 'القائمة' }) +
+      '<main class="view" style="gap:20px"><p class="lead">كل صفحات التطبيق في مكان واحد، مجمّعة بالأقسام</p>' +
+      PAGES.map(function (sec) {
+        return '<section class="all-sec"><div class="all-head"><h2>' + esc(sec.n) + '</h2><span class="num">' + countAr(sec.pages.length) + '</span></div>' +
+          '<div class="all-grid">' + sec.pages.map(function (pg) { return pageBtn(pg, 'pg-tile'); }).join('') + '</div></section>';
+      }).join('') + '</main>' + nav('');
+  }
   function viewLogin() {
     return '<div class="login"><div class="login-top"><div class="mark">RENO</div><div class="sub">STORE</div></div>' +
       '<div class="login-card"><h2>أهلاً بيكي</h2><p>سجّلي الدخول بحساب جوجل المسجّل عند الإدارة.</p>' +
@@ -283,6 +303,8 @@
     if (p[0] === 'catalog') return { name: 'catalog' };
     if (p[0] === 'p' && p[1]) return { name: 'product', code: p.slice(1).join('/') };
     if (p[0] === 'scan') return { name: 'scan' };
+    if (p[0] === 'all') return { name: 'all' };
+    if (p[0] === 's' && p[1]) return { name: 'section', id: p[1] };
     return { name: 'home' };
   }
   var current = null;
@@ -293,7 +315,7 @@
     if (LIVE && !S.token) { current = { name: 'login' }; app.innerHTML = viewLogin(); return; }
     if (!S.data) { current = { name: 'loading' }; app.innerHTML = viewLoading(); return; }
     var was = current && current.name; current = r;
-    app.innerHTML = r.name === 'catalog' ? viewCatalog() : r.name === 'product' ? viewProduct(r.code) : r.name === 'scan' ? viewScan() : viewHome();
+    app.innerHTML = r.name === 'catalog' ? viewCatalog() : r.name === 'product' ? viewProduct(r.code) : r.name === 'scan' ? viewScan() : r.name === 'all' ? viewAll() : r.name === 'section' ? viewSection(r.id) : viewHome();
     if (r.name === 'catalog') window.scrollTo(0, was === 'product' ? S.catScroll : 0); else window.scrollTo(0, 0);
     if (r.name === 'scan' && was !== 'scan') scanStart();
     else if (r.name === 'scan') scanAttach();
@@ -401,20 +423,23 @@
   }
 
   /* ---------- القائمة الجانبية ---------- */
+  var PAGES = window.RENO_PAGES || [];
+  function lu(body, cls) { return '<svg class="' + (cls || 'ic') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + body + '</svg>'; }
+  function countAr(n) { return n === 1 ? 'صفحة واحدة' : n === 2 ? 'صفحتان' : n <= 10 ? num(n) + ' صفحات' : num(n) + ' صفحة'; }
   function openDrawer() {
     var d = $('#drawer'), u = S.user || {}, name = u.name || (S.data && S.data.user && S.data.user.name) || 'رينو';
-    var p = S.perf, lines = ['نسخة التجربة <span class="ltr">' + esc(CFG.BUILD || '') + '</span>'];
-    if (p.loadMs != null) lines.push('تحميل البيانات: ' + secs(p.loadMs) + ' ث');
-    if (p.scanMs != null) lines.push('آخر مسح: ' + secs(p.scanMs) + ' ث');
-    d.innerHTML = '<div class="dr-head"><div class="avatar">' + esc(name.charAt(0)) + '</div><div><b>' + esc(name) + '</b><small>' + esc(u.email || (LIVE ? '' : 'بيانات عيّنة')) + '</small></div></div>' +
+    var p = S.perf, lines = ['نسخة <span class="ltr">' + esc(CFG.BUILD || '') + '</span>'];
+    if (p.loadMs != null) lines.push('تحميل البيانات ' + secs(p.loadMs) + ' ث');
+    if (p.scanMs != null) lines.push('آخر مسح ' + secs(p.scanMs) + ' ث');
+    d.innerHTML = '<div class="dr-title">RENO STORE</div>' +
       '<div class="dr-list">' +
-      '<button class="dr-item" data-act="tab" data-tab="home">' + IC.home + 'الرئيسية</button>' +
-      '<button class="dr-item" data-act="tab" data-tab="catalog">' + IC.grid + 'الكتالوج</button>' +
-      '<button class="dr-item" data-act="tab" data-tab="scan">' + IC.barcode + 'مسح الباركود</button>' +
-      (LIVE ? '<button class="dr-item" data-act="refresh">' + IC.sync + 'تحديث البيانات</button>' : '') +
-      '<button class="dr-item" data-act="install">' + IC.phone + 'تثبيت التطبيق على الموبايل</button>' +
-      (LIVE ? '<button class="dr-item" data-act="signout">' + IC.logout + 'تسجيل الخروج</button>' : '') +
-      '</div><div class="dr-foot">' + lines.join('<br>') + '</div>';
+      '<button class="dr-item all" data-act="nav" data-to="all"><span>كل الصفحات</span>' + IC.grid + '</button>' +
+      PAGES.map(function (sec) { return '<button class="dr-item" data-act="nav" data-to="s/' + sec.id + '"><span>' + esc(sec.n) + '</span>' + lu(sec.i) + '</button>'; }).join('') +
+      '</div><div class="dr-foot">' +
+      '<div class="dr-user"><div class="avatar" aria-hidden="true">' + esc(name.charAt(0)) + '</div><div class="dr-who"><b>' + esc(name) + '</b><small>' + esc(u.email || (LIVE ? '' : 'بيانات عيّنة')) + '</small></div></div>' +
+      '<div class="dr-tools">' + (LIVE ? '<button data-act="refresh">تحديث البيانات</button>' : '') + '<button data-act="install">تثبيت التطبيق</button></div>' +
+      (LIVE ? '<button class="dr-out" data-act="signout">تسجيل الخروج</button>' : '') +
+      '<div class="dr-meta">' + lines.join(' · ') + '</div></div>';
     d.hidden = false; $('#drawer-scrim').hidden = false;
   }
   function closeDrawer() { $('#drawer').hidden = true; $('#drawer-scrim').hidden = true; }
@@ -439,9 +464,11 @@
     if (a === 'tab' || a === 'tile') {
       var t = b.getAttribute('data-tab') || b.getAttribute('data-to'); closeDrawer();
       if (t === 'home' || t === 'catalog' || t === 'scan') return go(t);
-      return toast(t === 'sync' ? 'صفحة حالة المزامنة مش ضمن التجربة دي. الحالة ظاهرة في الرئيسية.' : 'الصفحة دي مش ضمن التجربة. هتتبني في مرحلتها.');
+      return toast(t === 'sync' ? 'صفحة حالة المزامنة لسه ما اتبنتش. الحالة ظاهرة في الرئيسية.' : 'الصفحة دي لسه ما اتبنتش. هتتفعّل في مرحلتها.');
     }
-    if (a === 'soon') return toast('الصفحة دي مش ضمن التجربة. هتتبني في مرحلتها.');
+    if (a === 'nav') { closeDrawer(); return go(b.getAttribute('data-to')); }
+    if (a === 'page') { var to = b.getAttribute('data-to'); return to ? go(to) : toast('الصفحة دي لسه ما اتبنتش. هتتفعّل في مرحلتها.'); }
+    if (a === 'soon') return toast('الصفحة دي لسه ما اتبنتش. هتتفعّل في مرحلتها.');
     if (a === 'add') return toast('الإضافة للفاتورة هتشتغل مع نظام الفاتورة.');
     if (a === 'open') return go('p/' + encodeURIComponent(b.getAttribute('data-code')));
     if (a === 'cat' || a === 'avail') {
