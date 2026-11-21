@@ -79,23 +79,36 @@
     try { sessionStorage.setItem('reno_idt', t); } catch (e) { }
     return true;
   }
-  function loadGis(cb) {
-    if (window.google && google.accounts && google.accounts.id) return cb();
-    var s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client'; s.async = true;
-    s.onload = cb; s.onerror = function () { S.loginErr = 'ماقدرناش نوصل لخدمة الدخول. اتأكدي من النت وجرّبي تاني.'; render(); };
-    document.head.appendChild(s);
+  /* الدخول بتحويل الصفحة كلها لجوجل والرجوع برمز الدخول. ده بيشتغل في أي متصفح موبايل، ومش محتاج نافذة منبثقة. */
+  var REDIRECT = location.origin + location.pathname.replace(/[^/]*$/, '');
+  function rnd() { var a = new Uint8Array(16); crypto.getRandomValues(a); return Array.prototype.map.call(a, function (x) { return ('0' + x.toString(16)).slice(-2); }).join(''); }
+  function startLogin(silent) {
+    var nonce = rnd(), hint = load('reno_hint');
+    store('reno_nonce', { n: nonce, at: Date.now(), silent: !!silent, back: location.hash });
+    location.assign('https://accounts.google.com/o/oauth2/v2/auth?client_id=' + encodeURIComponent(CFG.CLIENT_ID) +
+      '&response_type=id_token&scope=' + encodeURIComponent('openid email profile') + '&redirect_uri=' + encodeURIComponent(REDIRECT) +
+      '&nonce=' + nonce + (silent && hint ? '&prompt=none&login_hint=' + encodeURIComponent(hint) : '&prompt=select_account'));
   }
-  function initGis() {
-    loadGis(function () {
-      google.accounts.id.initialize({ client_id: CFG.CLIENT_ID, auto_select: true, cancel_on_tap_outside: false, callback: function (r) { if (setToken(r.credential)) { S.loginErr = ''; bootstrap(); } } });
-      var host = $('#gbtn'); if (host) google.accounts.id.renderButton(host, { theme: 'filled_black', size: 'large', shape: 'pill', text: 'signin_with', locale: 'ar', width: 280 });
-      google.accounts.id.prompt();
-    });
+  /* بيقرا نتيجة الرجوع من جوجل من آخر العنوان، وبيمسحها من العنوان فورًا. بيرجّع true لو كان فيه نتيجة. */
+  function finishLogin() {
+    var h = location.hash.replace(/^#/, '');
+    if (!/(^|&)(id_token|error)=/.test(h)) return false;
+    var q = {}; h.split('&').forEach(function (kv) { var i = kv.indexOf('='); if (i > 0) q[kv.slice(0, i)] = decodeURIComponent(kv.slice(i + 1).replace(/\+/g, ' ')); });
+    var st = load('reno_nonce') || {}; store('reno_nonce', null);
+    history.replaceState(null, '', location.pathname + location.search + (/^#(home|catalog|scan|p\/)/.test(st.back || '') ? st.back : '#home'));
+    if (q.error) {
+      if (!st.silent) S.loginErr = q.error === 'access_denied' ? 'الدخول اتلغى، أو الحساب ده مش مضاف في وضع التجربة عند جوجل.' : 'جوجل رفضت طلب الدخول (' + q.error + '). جرّبي تاني.';
+      return true;
+    }
+    var p = parseJwt(q.id_token || '');
+    if (!p || !st.n || p.nonce !== st.n || Date.now() - st.at > 600000) { S.loginErr = 'طلب الدخول ما اكتملش. جرّبي تاني.'; return true; }
+    if (setToken(q.id_token)) { store('reno_hint', S.user.email); S.loginErr = ''; S.fresh = true; }
+    return true;
   }
   function signOut() {
     try { sessionStorage.removeItem('reno_idt'); } catch (e) { }
     store('reno_cache', null); S.token = null; S.user = null; S.data = null; S.models = [];
-    if (window.google && google.accounts && google.accounts.id) google.accounts.id.disableAutoSelect();
+    store('reno_hint', null); store('reno_nonce', null);
     closeDrawer(); render();
   }
   var ERR = {
@@ -113,7 +126,11 @@
         S.loading = false;
         if (!d || !d.ok) {
           var code = (d && d.error) || 'server';
-          if (code === 'not_allowed' || code === 'bad_token' || code === 'no_token') { S.loginErr = ERR[code]; setToken(null); store('reno_cache', null); S.data = null; render(); }
+          if (code === 'not_allowed' || code === 'bad_token' || code === 'no_token') {
+            setToken(null);
+            if (code !== 'not_allowed' && !S.fresh && load('reno_hint')) return startLogin(true);
+            S.loginErr = ERR[code]; store('reno_cache', null); S.data = null; render();
+          }
           else { toast(ERR.server); render(); }
           return;
         }
@@ -253,7 +270,8 @@
     return '<div class="login"><div class="login-top"><div class="mark">RENO</div><div class="sub">STORE</div></div>' +
       '<div class="login-card"><h2>أهلاً بيكي</h2><p>سجّلي الدخول بحساب جوجل المسجّل عند الإدارة.</p>' +
       (S.loginErr ? '<div class="login-err">' + esc(S.loginErr) + '</div>' : '') +
-      '<div class="gbtn" id="gbtn"></div></div></div>';
+      '<button class="btn login-btn" data-act="login">الدخول بحساب جوجل</button>' +
+      '<small class="login-note">هتتحوّلي لصفحة جوجل وترجعي هنا تلقائي.</small></div></div>';
   }
   function viewLoading() {
     return head({ brand: true }) + '<main class="view"><div class="skeleton" style="height:64px"></div><div class="skeleton" style="height:104px"></div><div class="skeleton"></div><div class="skeleton"></div></main>' + nav('home');
@@ -272,7 +290,7 @@
     var r = route();
     if (current && current.name === 'catalog' && r.name !== 'catalog') S.catScroll = window.scrollY;
     if (current && current.name === 'scan' && r.name !== 'scan') scanStop();
-    if (LIVE && !S.token) { current = { name: 'login' }; app.innerHTML = viewLogin(); initGis(); return; }
+    if (LIVE && !S.token) { current = { name: 'login' }; app.innerHTML = viewLogin(); return; }
     if (!S.data) { current = { name: 'loading' }; app.innerHTML = viewLoading(); return; }
     var was = current && current.name; current = r;
     app.innerHTML = r.name === 'catalog' ? viewCatalog() : r.name === 'product' ? viewProduct(r.code) : r.name === 'scan' ? viewScan() : viewHome();
@@ -414,6 +432,7 @@
     var b = e.target.closest('[data-act]'); if (!b) return;
     var a = b.getAttribute('data-act');
     if (a === 'menu') return openDrawer();
+    if (a === 'login') { b.disabled = true; b.textContent = 'بنحوّلك لجوجل…'; return startLogin(false); }
     if (a === 'back') { if (history.length > 1 && current && current.name !== 'home') history.back(); else go('home'); return; }
     if (a === 'search') { go('catalog'); setTimeout(function () { var q = $('#q'); if (q) q.focus(); }, 60); return; }
     if (a === 'scan') return go('scan');
@@ -465,10 +484,15 @@
   }
   if (!LIVE) { setData(window.RENO_SAMPLE); render(); }
   else {
-    var saved = null; try { saved = sessionStorage.getItem('reno_idt'); } catch (e) { }
-    if (saved && setToken(saved)) {
+    var came = finishLogin(), saved = null;
+    if (!S.token) { try { saved = sessionStorage.getItem('reno_idt'); } catch (e) { } if (saved) setToken(saved); }
+    if (S.token) {
       var c = load('reno_cache'); if (c && c.data && c.email === S.user.email) setData(c.data);
       render(); bootstrap();
-    } else render();
+    } else {
+      var tried = null; try { tried = sessionStorage.getItem('reno_silent'); } catch (e) { }
+      if (!came && !tried && load('reno_hint')) { try { sessionStorage.setItem('reno_silent', '1'); } catch (e) { } startLogin(true); }
+      else render();
+    }
   }
 })();

@@ -223,7 +223,9 @@ input { font: inherit; color: inherit; }
 .login-card { background: var(--bg); color: var(--ink); border-radius: 26px 26px 0 0; padding: 26px 22px calc(var(--sab) + 28px); display: flex; flex-direction: column; gap: 14px; align-items: center; text-align: center; }
 .login-card h2 { margin: 0; font-size: 21px; font-weight: 800; }
 .login-card p { margin: 0; color: var(--muted); font-size: 14.5px; max-width: 300px; }
-.login-card .gbtn { min-height: 44px; display: grid; place-items: center; }
+.login-btn { width: 100%; max-width: 300px; height: 50px; border-radius: 14px; font-size: 16.5px; }
+.login-btn:disabled { opacity: .7; }
+.login-note { color: var(--muted); font-size: 12.5px; }
 .login-err { background: var(--red-bg); color: var(--red); border-radius: 12px; padding: 10px 14px; font-size: 14px; width: 100%; }
 
 /* القائمة الجانبية */
