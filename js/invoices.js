@@ -156,9 +156,9 @@
     var fill = done ? 75 : cur * 25;
     return '<section class="card inv-steps" aria-label="مراحل التنفيذ"><span class="track" aria-hidden="true"></span><span class="track on" aria-hidden="true" style="width:' + fill + '%"></span><ol>' +
       names.map(function (n, i) {
-        var st = i < cur ? 'done' : i === cur ? 'cur' : 'todo';
-        return '<li class="' + st + '"' + (st === 'cur' ? ' aria-current="step"' : '') + '><span class="dot">' + (st === 'done' ? IX.check : st === 'cur' ? '<i></i>' : '') + '</span><b>' + n + '</b>' +
-          '<small>' + (i === 0 ? dateShort(o.day) : (i === 2 && o.shipAt && st !== 'todo') ? dateShort(o.shipAt.slice(0, 10)) : (i === 3 && o.doneAt && st === 'done') ? dateShort(o.doneAt.slice(0, 10)) : st === 'done' ? 'تم' : st === 'cur' ? 'دلوقتي' : 'لسه') + '</small></li>';
+        var st = i < cur ? 'past' : i === cur ? 'cur' : 'todo';
+        return '<li class="' + st + '"' + (st === 'cur' ? ' aria-current="step"' : '') + '><span class="dot">' + (st === 'past' ? IX.check : st === 'cur' ? '<i></i>' : '') + '</span><b>' + n + '</b>' +
+          '<small>' + (i === 0 ? dateShort(o.day) : (i === 2 && o.shipAt && st !== 'todo') ? dateShort(o.shipAt.slice(0, 10)) : (i === 3 && o.doneAt && st === 'past') ? dateShort(o.doneAt.slice(0, 10)) : st === 'past' ? 'تم' : st === 'cur' ? 'دلوقتي' : 'لسه') + '</small></li>';
       }).join('') + '</ol></section>';
   }
   function statusLine(o) {

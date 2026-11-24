@@ -494,8 +494,9 @@ body:has(.done-foot) .toast { bottom: calc(var(--sab) + 158px); }
 .inv-steps ol { margin: 0; padding: 0; list-style: none; position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .inv-steps li { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .inv-steps .dot { width: 20px; height: 20px; border-radius: 10px; display: grid; place-items: center; background: #fff; border: 2px solid var(--line); }
-.inv-steps li.done .dot { background: var(--burgundy); border-color: var(--burgundy); color: #fff; }
-.inv-steps li.done .dot .ic { width: 12px; height: 12px; }
+/* «past» مش «done»: الاسم ده محجوز لشاشة «تم البيع» وبيكسر ارتفاع الكارت */
+.inv-steps li.past .dot { background: var(--burgundy); border-color: var(--burgundy); color: #fff; }
+.inv-steps li.past .dot .ic { width: 12px; height: 12px; }
 .inv-steps li.cur .dot { border-color: var(--burgundy); }
 .inv-steps li.cur .dot i { width: 8px; height: 8px; border-radius: 4px; background: var(--burgundy); }
 .inv-steps li b { font-size: 12px; font-weight: 700; line-height: 1.4; }
